@@ -3,10 +3,8 @@ import re
 import argparse
 from moviepy import ImageClip, AudioFileClip, CompositeVideoClip
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_DIR = os.path.join(BASE_DIR, "images")
-MP3_DIR = os.path.join(BASE_DIR, "mp3")
-MP4_DIR = os.path.join(BASE_DIR, "mp4")
+from config import IMAGES_DIR, MP3_DIR, YOUTUBE_DIR
+from youtube_metadata import generate_youtube_metadata
 
 def rename_images(image_folder):
     """Xóa các ký tự trước dấu '[' trong tên file ảnh."""
@@ -63,7 +61,6 @@ def build_clips_with_slide(images_with_time, image_folder, video_duration, video
 
         path = os.path.join(image_folder, fname)
 
-        # Tạo clip ảnh tại đúng thời gian start_sec tuyệt đối, bỏ hoàn toàn slide
         clip = (ImageClip(path)
                 .with_start(start_sec)
                 .with_duration(duration)
@@ -74,7 +71,7 @@ def build_clips_with_slide(images_with_time, image_folder, video_duration, video
     return clips
 
 def ensure_dirs():
-    for folder in (IMAGES_DIR, MP3_DIR, MP4_DIR):
+    for folder in (IMAGES_DIR, MP3_DIR, YOUTUBE_DIR):
         os.makedirs(folder, exist_ok=True)
 
 def find_first_mp3(mp3_dir):
@@ -95,15 +92,14 @@ def resolve_paths(audio_path=None, image_folder=None, output_path=None):
             raise FileNotFoundError("Không tìm thấy file .mp3 nào trong folder mp3/")
     if output_path is None:
         mp3_name = os.path.splitext(os.path.basename(audio_path))[0]
-        output_path = os.path.join(MP4_DIR, f"{mp3_name}.mp4")
+        output_path = os.path.join(YOUTUBE_DIR, f"{mp3_name}.mp4")
     return audio_path, image_folder, output_path
 
 def main(audio_path, image_folder, output_path):
-    print("Đang xử lý...")
+    print("Đang xử lý video...")
     audio = AudioFileClip(audio_path).with_volume_scaled(2)
     video_duration = audio.duration
 
-    # Rename ảnh: xóa ký tự trước dấu '[' trong tên file
     rename_images(image_folder)
 
     images_with_time = parse_image_infos(image_folder)
@@ -111,26 +107,27 @@ def main(audio_path, image_folder, output_path):
         print("Không tìm thấy file ảnh hợp lệ!")
         return
 
-    # Lấy kích thước frame chuẩn (từ ảnh đầu tiên)
     first_img = os.path.join(image_folder, images_with_time[0][1])
-    # w, h
     size = ImageClip(first_img).size
 
     clips = build_clips_with_slide(images_with_time, image_folder, video_duration, size)
 
-    # Dùng CompositeVideoClip để đặt các clip ở đúng thời điểm tuyệt đối thay vì concatenate
     video = CompositeVideoClip(clips, size=size)
     video = video.with_audio(audio)
     video = video.with_duration(video_duration)
 
     video.write_videofile(output_path, fps=24, audio_codec="aac")
-    print(f"Đã xuất video ra: {output_path}")
+    print(f"Đã xuất video: {output_path}")
+
+    mp3_name = os.path.splitext(os.path.basename(audio_path))[0]
+    print("Đang tạo metadata YouTube...")
+    generate_youtube_metadata(mp3_name)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Ghép ảnh và mp3 thành video")
+    parser = argparse.ArgumentParser(description="Ghép ảnh và mp3 thành video + metadata YouTube")
     parser.add_argument("--audio", help="Path đến file mp3 (mặc định: file đầu tiên trong mp3/)")
     parser.add_argument("--images", help="Path đến folder chứa ảnh (mặc định: images/)")
-    parser.add_argument("--output", help="Path file video đầu ra (mặc định: mp4/<tên-mp3>.mp4)")
+    parser.add_argument("--output", help="Path file video đầu ra (mặc định: youtube/<tên-mp3>.mp4)")
     args = parser.parse_args()
     try:
         audio_path, image_folder, output_path = resolve_paths(
