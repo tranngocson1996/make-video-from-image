@@ -1,10 +1,12 @@
 import os
 import re
 import argparse
-from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-import moviepy.video.fx as vfx
+from moviepy import ImageClip, AudioFileClip, CompositeVideoClip
 
-SLIDE_DURATION = 0.5  # Thời gian hiệu ứng chuyển slide, theo giây
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
+MP3_DIR = os.path.join(BASE_DIR, "mp3")
+MP4_DIR = os.path.join(BASE_DIR, "mp4")
 
 def rename_images(image_folder):
     """Xóa các ký tự trước dấu '[' trong tên file ảnh."""
@@ -71,6 +73,31 @@ def build_clips_with_slide(images_with_time, image_folder, video_duration, video
 
     return clips
 
+def ensure_dirs():
+    for folder in (IMAGES_DIR, MP3_DIR, MP4_DIR):
+        os.makedirs(folder, exist_ok=True)
+
+def find_first_mp3(mp3_dir):
+    mp3_files = sorted(
+        f for f in os.listdir(mp3_dir)
+        if os.path.isfile(os.path.join(mp3_dir, f)) and f.lower().endswith(".mp3")
+    )
+    if not mp3_files:
+        return None
+    return os.path.join(mp3_dir, mp3_files[0])
+
+def resolve_paths(audio_path=None, image_folder=None, output_path=None):
+    ensure_dirs()
+    image_folder = image_folder or IMAGES_DIR
+    if audio_path is None:
+        audio_path = find_first_mp3(MP3_DIR)
+        if not audio_path:
+            raise FileNotFoundError("Không tìm thấy file .mp3 nào trong folder mp3/")
+    if output_path is None:
+        mp3_name = os.path.splitext(os.path.basename(audio_path))[0]
+        output_path = os.path.join(MP4_DIR, f"{mp3_name}.mp4")
+    return audio_path, image_folder, output_path
+
 def main(audio_path, image_folder, output_path):
     print("Đang xử lý...")
     audio = AudioFileClip(audio_path).with_volume_scaled(2)
@@ -100,9 +127,19 @@ def main(audio_path, image_folder, output_path):
     print(f"Đã xuất video ra: {output_path}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Ghép ảnh và mp3 thành video có hiệu ứng slide")
-    parser.add_argument('--audio', required=True, help="Path đến file mp3")
-    parser.add_argument('--images', required=True, help="Path đến folder chứa ảnh")
-    parser.add_argument('--output', required=True, help="Path file video đầu ra (.mp4)")
+    parser = argparse.ArgumentParser(description="Ghép ảnh và mp3 thành video")
+    parser.add_argument("--audio", help="Path đến file mp3 (mặc định: file đầu tiên trong mp3/)")
+    parser.add_argument("--images", help="Path đến folder chứa ảnh (mặc định: images/)")
+    parser.add_argument("--output", help="Path file video đầu ra (mặc định: mp4/<tên-mp3>.mp4)")
     args = parser.parse_args()
-    main(args.audio, args.images, args.output)
+    try:
+        audio_path, image_folder, output_path = resolve_paths(
+            args.audio, args.images, args.output
+        )
+    except FileNotFoundError as e:
+        print(e)
+        raise SystemExit(1)
+    print(f"Ảnh: {image_folder}")
+    print(f"MP3: {audio_path}")
+    print(f"Xuất: {output_path}")
+    main(audio_path, image_folder, output_path)
