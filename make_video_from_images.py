@@ -73,7 +73,7 @@ def build_clips_with_slide(images_with_time, image_folder, video_duration, video
 
 def main(audio_path, image_folder, output_path):
     print("Đang xử lý...")
-    audio = AudioFileClip(audio_path)
+    audio = AudioFileClip(audio_path).with_volume_scaled(2)
     video_duration = audio.duration
 
     # Rename ảnh: xóa ký tự trước dấu '[' trong tên file
